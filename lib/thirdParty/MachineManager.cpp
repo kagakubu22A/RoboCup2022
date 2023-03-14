@@ -20,6 +20,8 @@ Direction MachineManager::NowFacingAbs = Direction::North;
 
 BASE_X MachineManager::bx = BASE_X();
 
+vector<TaskHandle_t> MachineManager::tasks = vector<TaskHandle_t>(3);
+
 // 後退したタイルたち
 vector<Point> MachineManager::_retreatTiles;
 
@@ -165,16 +167,12 @@ void MachineManager::Move1Tile()
 		// TODO 障害物検知とか追加して
 		// ti._obsvec;
 
-		// TODO TILEmanagerとMappingManagerどうしよう
-		// TileManager::AddTile(ti);
 		MappingManager::PointAdd(ti);
 	}
 	else
 	{ // 黒いタイルや行き止まりで引き返してきたときは、さっき測ったデータを取得することで時短
 		M5.Lcd.println("old tile");
 		TileInfo ti;
-		// TODO 変える
-		// TileManager::GetTileFromPosition(_nowRobotPosition, ti);
 		MappingManager::GetTileFromPosition(_nowRobotPosition, ti);
 
 		// 壁の復元
@@ -246,9 +244,6 @@ void MachineManager::Move1Tile()
 	Serial.printf("canleft: %d, canforward: %d, canright: %d\n", canLeft, canForward, canRight);
 	Serial.println("----------------------------------Robot condtion end-------------------------------");
 #endif
-
-	if (ForceStop)
-		return;
 
 	// 右手法であるから、右に行けるとわかったらとにかく右に行く
 	if (canRight == 0)
@@ -420,12 +415,6 @@ void MachineManager::MoveForward(double cm)
 	// 指定された長さ動くまで待機、黒いマスを見つけたら即座に後退する
 	while (abs(bx.GetEncoderValue(BASE_X_TIRE_PORT_LEFT)) < abs(movecm))
 	{
-		// リスタート
-		if (ForceStop)
-		{
-			_motor_off();
-			return;
-		}
 		TCSManager::TCS_read();
 		mpu->read();
 
@@ -442,11 +431,6 @@ void MachineManager::MoveForward(double cm)
 
 			while (bx.GetEncoderValue(BASE_X_TIRE_PORT_LEFT) < 0)
 			{
-				if (ForceStop)
-				{
-					_motor_off();
-					return;
-				}
 				delay(1);
 			}
 			_motor_off();

@@ -67,22 +67,25 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 
 		Wire.requestFrom(TOF_ADDRESS, 2);
 
+		if (Wire.available() == 0)
+		{
+			Serial.printf("no data can be received!!! i is %d, dir is %d\n", i, (int)ang);
+		}
+
 		uint16_t tmp = Wire.read() << 8 | Wire.read();
 
 		if (tmp == 8888 || tmp == 0b1111111111111111 || tmp == 0)
 		{
-			M5.Lcd.printf("%u detected!! i is %d\n", tmp, i);
-			Serial.printf("%u detected!! i is %d\n", tmp, i);
+			M5.Lcd.printf("%u detected!! i is %d, dir is %d\n", tmp, i, (int)ang);
+			Serial.printf("%u detected!! i is %d, dir is %d\n", tmp, i, (int)ang);
 			if (tmp == 8888)
 				amari++;
 
 			// はずれが5回以上出たら壁はないものとして返す
 			if (amari >= 5)
 			{
-				M5.Lcd.printf("too many errors detected! angle is %d\n", ang);
-				Serial.printf("too many errors detected! angle is %d\n", ang);
 				xSemaphoreGive(MachineManager::semaphore);
-				return 10000;
+				return 8888;
 			}
 			continue;
 		}

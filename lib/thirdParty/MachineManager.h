@@ -107,6 +107,10 @@ private:
 
 public:
 	static vector<double> gyro_y;
+
+	//‰‚ß‚Élooptask‚ğ“ü‚ê‚é‚±‚Æ
+	static vector<TaskHandle_t> tasks;
+	
 	static string p2str(Point p);
 	static volatile SemaphoreHandle_t semaphore;
 	static Direction _a2dir(Angle ang);
