@@ -42,54 +42,6 @@ Wall TileInfo::GetWall(Direction dir)
 	}
 }
 
-Wall TileManager::CheckWall(Point point, Angle ang)
-{
-	switch (ang)
-	{
-	case Angle::Left:
-		break;
-	case Angle::Forward:
-		break;
-	case Angle::Right:
-		break;
-	case Angle::Backward:
-		break;
-	default:
-		break;
-	}
-
-	// TODO
-	return Wall::Unknown;
-}
-
-bool TileManager::GetTileFromPosition(Point point, TileInfo &tl)
-{
-	for (TileInfo ti : _tilevec)
-	{
-		if (ti.GetPoint() == point)
-		{
-			tl = ti;
-			return true;
-		}
-	}
-	return false;
-}
-
-void TileManager::AddTile(TileInfo tile)
-{
-	_tilevec.push_back(tile);
-}
-
-bool TileManager::IsTileAchieved(Point p)
-{
-	for (TileInfo ti : _tilevec)
-	{
-		if (ti.GetPoint() == p)
-			return true;
-	}
-	return false;
-}
-
 void TileManager::Initialize(Walls walls)
 {
 	_tilevec.push_back(TileInfo{Point{0, 0}, walls, vector<Obstacle>{Obstacle::Nothing}, FloorType::StartPoint});

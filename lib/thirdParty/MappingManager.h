@@ -53,6 +53,7 @@ class MappingManager{
 
     static bool GetTileFromPosition(Point point, TileInfo &tl);
 
+    static void DeleteAsBlack(Point p);
 };
 
 #endif

@@ -48,10 +48,10 @@ void RouteManager::Move1Step()
 		}
 		TileInfo tl;
 
-		//
-		if (!TileManager::GetTileFromPosition(tmpv[i].getLatest(), tl))
+		if (!MappingManager::GetTileFromPosition(tmpv[i].getLatest(), tl))
 		{
-			throw std::runtime_error("Unknown Error occured in RouteManager::Move1Step()");
+			Serial.println("unexplored tile refered!!");
+			throw std::runtime_error("unexplored tile refered!!");
 		}
 
 		// Å‘å4•ûŒü‚ÉL‚Î‚¹‚é‚Ì‚Å4‰ñŒJ‚è•Ô‚·
@@ -112,6 +112,8 @@ Route_v2 RouteManager::Pos2Pos(Point start, Point end)
 	{
 		_simPassedPosList[i].period++;
 	}
+
+	Serial.println("[DEBUG] Initial step passed");
 
 	while (RouteManager::WhenPointReached(end) == -1)
 	{

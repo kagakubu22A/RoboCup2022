@@ -8,7 +8,6 @@
 
 enum class Direction : signed char
 {
-
 	West,
 	North,
 	East,

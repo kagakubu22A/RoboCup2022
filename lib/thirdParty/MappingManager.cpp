@@ -49,14 +49,24 @@ bool MappingManager::PointAdd(TileInfo tile)
 	// いけるけど行っていないタイルを更新する
 	for (int i = 0; i < 4; i++)
 	{
+		// Serial.println(tile.GetWall((Direction)i) == Wall::WallExists);
 		if (tile.GetWall((Direction)i) == Wall::WallNotExists)
 		{
-			Point tp = MachineManager::_a2p((Angle)i);
+			Serial.printf("dircrion: %d, wall notexists\n", i);
+			Point tp = MachineManager::_dir2p(tile._p, (Direction)i);
 			if (checkOverlap(_passedTileVec, tp) == -1)
 			{
 				_unexploredPosvec.push_back(tp);
 				Serial.printf("new unexplored tile at %s\n", MachineManager::p2str(tp).c_str());
 			}
+		}
+	}
+	// 行けるけど行っていないタイルのうち、今回で訪れたタイルがあれば削除
+	for (int i = 0; i < _unexploredPosvec.size(); i++)
+	{
+		if (_unexploredPosvec[i] == tile._p)
+		{
+			_unexploredPosvec.erase(_unexploredPosvec.begin() + i);
 		}
 	}
 	return true;
@@ -108,6 +118,12 @@ int MappingManager::checkOverlap(vector<TileInfo> tl, Point checkedPos)
 	return -1;
 }
 
+/// @brief デバッグ用関数、任意の向きに壁があるタイルを作れる
+/// @param west
+/// @param north
+/// @param east
+/// @param south
+/// @return
 Walls MappingManager::_wallgenerate(bool west, bool north, bool east, bool south)
 {
 	return Walls{west ? Wall::WallExists : Wall::WallNotExists, north ? Wall::WallExists : Wall::WallNotExists, east ? Wall::WallExists : Wall::WallNotExists, south ? Wall::WallExists : Wall::WallNotExists};
@@ -314,6 +330,11 @@ Point MappingManager::GetUnreachedAndDelete()
 {
 	int at = _unexploredPosvec.size() - 1;
 	Point p = _unexploredPosvec[at];
+	Serial.println("candidates to reach:");
+	for (int i = 0; i < _unexploredPosvec.size(); i++)
+	{
+		Serial.printf("%s\n", MachineManager::p2str(_unexploredPosvec[i]).c_str());
+	}
 	_unexploredPosvec.erase(_unexploredPosvec.begin() + at);
 	M5.Lcd.printf("Deleted at :");
 	Serial.printf("deleted at : (%d, %d)\n", p.x, p.y);
@@ -350,4 +371,17 @@ int MappingManager::IsReached(Point p)
 vector<TileInfo> MappingManager::GetPassedTileVec()
 {
 	return _passedTileVec;
+}
+
+/// @brief 応急処置関数。pを_unexploredvecから除去する
+/// @param p
+void MappingManager::DeleteAsBlack(Point p)
+{
+	for (int i = 0; i < _unexploredPosvec.size(); i++)
+	{
+		if (_unexploredPosvec[i] == p)
+		{
+			_unexploredPosvec.erase(_unexploredPosvec.begin() + i);
+		}
+	}
 }

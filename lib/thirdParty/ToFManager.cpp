@@ -40,7 +40,7 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 	{
 		Wire.beginTransmission(TOF_ADDRESS);
 		Wire.write(0xD3);
-		//Wire.endTransmission(false);
+		// Wire.endTransmission(false);
 		Wire.endTransmission();
 
 		Wire.requestFrom(TOF_ADDRESS, 2);
@@ -59,6 +59,8 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 	int sum = 0;
 
 	int amari = 0;
+
+	uint16_t min = 8888, max = 0;
 
 	// 2回に一回エラーが出るので両方見る用
 	bool debugwatcher = false;
@@ -81,7 +83,7 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 
 		uint16_t tmp = Wire.read() << 8 | Wire.read();
 
-		if (tmp > 8888 || tmp == 0)
+		if (tmp > (uint16_t)8888 || tmp == (uint16_t)0 || tmp == (uint16_t)256)
 		{
 			M5.Lcd.printf("%u detected!! i is %d, dir is %d\n", tmp, i, (int)ang);
 			Serial.printf("%u detected!! i is %d, dir is %d\n", tmp, i, (int)ang);
@@ -98,10 +100,21 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 			return 8888;
 		}
 
+		if (max < tmp)
+		{
+			max = tmp;
+		}
+		if (min > tmp)
+		{
+			min = tmp;
+		}
+
 		sum += (int)tmp;
 
 		delay(6);
 	}
+
+	Serial.printf("min: %d,max: %d\n", (int)min, (int)max);
 
 	xSemaphoreGive(MachineManager::semaphore);
 	return (int)round((double)sum / n);

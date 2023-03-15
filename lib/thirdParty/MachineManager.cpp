@@ -111,6 +111,7 @@ string MachineManager::p2str(Point p)
 /// <param name="ang"></param>
 void MachineManager::Move1Tile()
 {
+	Serial.println("Move1tile begin");
 	// 注意
 	// wlの配列に入れるのは西北東南の順(絶対的指標)
 	// tofdisarrに入れるのは左前右後の順(相対的指標)
@@ -118,15 +119,31 @@ void MachineManager::Move1Tile()
 	// 左上右下
 	bool wallexists[4] = {false, false, false, false};
 
-	//ToFセンサを読み取る回数
+	// ToFセンサを読み取る回数
 	const int sensortimes = 30;
 
 	bool ltreached = false;
 	bool ttreached = false;
 	bool rtreached = false;
 
+	bool isprevclimb = false;
 	// 流れ
 	// 距離を測る→マッピングに追加する→測った距離に従って機体を移動させる
+
+	// 坂などの障害物がなかった時には毎回リセットをする
+	if (isprevclimb)
+	{
+		if (xSemaphoreTake(semaphore, 20) == pdTRUE)
+		{
+			mpu->_reset();
+			delay(10);
+			xSemaphoreGive(semaphore);
+		}
+		else
+		{
+			Serial.println("tried to get semaphore to reset mpu, but failed to do!");
+		}
+	}
 
 	// 最初だけ後ろも測る
 	if (!_inited)
@@ -142,6 +159,7 @@ void MachineManager::Move1Tile()
 
 	if (MappingManager::IsReached(_nowRobotPosition) == -1)
 	{
+		delay(500);
 		tofdisarr[TOF_LEFT] = ToFManager::GetDistance(ToFAngle::Left, sensortimes);
 		delay(10);
 		tofdisarr[TOF_FORWARD] = ToFManager::GetDistance(ToFAngle::Forward, sensortimes);
@@ -359,6 +377,9 @@ Point MachineManager::_dir2p(Point p, Direction dir)
 void MachineManager::DirCorrection()
 {
 
+	//TODO 後で消すこと
+	return;
+
 	// 前についている２つのセンサーの距離の差から角度を出す
 	int f1 = (int)ToFManager::GetDistance(ToFAngle::Forward, 80);
 	int f2 = (int)ToFManager::GetDistance(ToFAngle::Forward2, 80);
@@ -420,12 +441,11 @@ void MachineManager::MoveForward(double cm)
 	while (abs(bx.GetEncoderValue(BASE_X_TIRE_PORT_LEFT)) < abs(movecm))
 	{
 		TCSManager::TCS_read();
-		mpu->read();
 
-		Serial.printf("gyro z : %lf\ngyro y : %lf\n", mpu->gyro[2][1], mpu->gyro[1][1]);
+		//Serial.printf("gyro z : %lf\ngyro y : %lf, clearness : %d\n", mpu->gyro[2][1], mpu->gyro[1][1], TCSManager::Clear);
 
 		// 黒に踏み込んだら
-		if (TCSManager::Clear < 200)
+		if (TCSManager::Clear < 800)
 		{
 			M5.Lcd.println("Black Floor detected!!!");
 			_motor_off();
