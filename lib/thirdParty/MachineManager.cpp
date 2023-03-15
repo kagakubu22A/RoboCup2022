@@ -120,7 +120,7 @@ void MachineManager::Move1Tile()
 	bool wallexists[4] = {false, false, false, false};
 
 	// ToFセンサを読み取る回数
-	const int sensortimes = 30;
+	const int sensortimes = 7;
 
 	bool ltreached = false;
 	bool ttreached = false;
@@ -159,7 +159,6 @@ void MachineManager::Move1Tile()
 
 	if (MappingManager::IsReached(_nowRobotPosition) == -1)
 	{
-		delay(500);
 		tofdisarr[TOF_LEFT] = ToFManager::GetDistance(ToFAngle::Left, sensortimes);
 		delay(10);
 		tofdisarr[TOF_FORWARD] = ToFManager::GetDistance(ToFAngle::Forward, sensortimes);
@@ -377,7 +376,7 @@ Point MachineManager::_dir2p(Point p, Direction dir)
 void MachineManager::DirCorrection()
 {
 
-	//TODO 後で消すこと
+	// TODO 後で消すこと
 	return;
 
 	// 前についている２つのセンサーの距離の差から角度を出す
@@ -442,7 +441,7 @@ void MachineManager::MoveForward(double cm)
 	{
 		TCSManager::TCS_read();
 
-		//Serial.printf("gyro z : %lf\ngyro y : %lf, clearness : %d\n", mpu->gyro[2][1], mpu->gyro[1][1], TCSManager::Clear);
+		// Serial.printf("gyro z : %lf\ngyro y : %lf, clearness : %d\n", mpu->gyro[2][1], mpu->gyro[1][1], TCSManager::Clear);
 
 		// 黒に踏み込んだら
 		if (TCSManager::Clear < 800)
@@ -954,4 +953,9 @@ string MachineManager::Dir2Str(Direction dir)
 		return "Unknown direction";
 		break;
 	}
+}
+
+uint16_t MachineManager::Readtmp(int i, int n)
+{
+	return ToFManager::GetDistance((ToFAngle)i, n);
 }

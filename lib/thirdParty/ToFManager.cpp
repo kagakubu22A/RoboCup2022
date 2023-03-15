@@ -46,7 +46,7 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 		Wire.requestFrom(TOF_ADDRESS, 2);
 		uint16_t tmp = Wire.read() << 8 | Wire.read();
 
-		delay(6);
+		delay(34);
 
 		// Tofは計測するごとに34msのクールタイムが必要
 		/*delay(34);
@@ -56,14 +56,13 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 		delay(34);*/
 	}
 
+	vector<uint16_t> tmpv;
+
 	int sum = 0;
 
 	int amari = 0;
 
 	uint16_t min = 8888, max = 0;
-
-	// 2回に一回エラーが出るので両方見る用
-	bool debugwatcher = false;
 
 	for (int i = 0; i < n + amari; i++)
 	{
@@ -111,10 +110,17 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 
 		sum += (int)tmp;
 
-		delay(6);
+		tmpv.push_back(tmp);
+
+		delay(34);
 	}
 
 	Serial.printf("min: %d,max: %d\n", (int)min, (int)max);
+	/*for (int i = 0; i < tmpv.size(); i++)
+	{
+		Serial.printf("%d,", (int)tmpv[i]);
+	}
+	Serial.println();*/
 
 	xSemaphoreGive(MachineManager::semaphore);
 	return (int)round((double)sum / n);

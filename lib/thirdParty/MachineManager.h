@@ -158,4 +158,6 @@ public:
 	static void MLXRead();
 
 	static string Dir2Str(Direction dir);
+
+	static uint16_t Readtmp(int i,int n);
 };
