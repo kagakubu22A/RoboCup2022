@@ -10,10 +10,6 @@
 
 #include "M5Stack.h"
 
-#define MAX(in, max)            (((in) > (max)) ? (in) : (max))
-#define MIN(in, min)            (((in) < (min)) ? (in) : (min))
-#define CONSTRAIN(in, min, max) MAX(min, MIN(in, max))
-
 uint8_t BASE_X::CheckPos(uint8_t pos) {
     pos = pos - 1;
     pos = CONSTRAIN(pos, 0, 3);

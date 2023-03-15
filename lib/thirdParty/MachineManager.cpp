@@ -20,7 +20,7 @@ Direction MachineManager::NowFacingAbs = Direction::North;
 
 BASE_X MachineManager::bx = BASE_X();
 
-vector<TaskHandle_t> MachineManager::tasks = vector<TaskHandle_t>(3);
+vector<MachineManager::Task> MachineManager::taskvec;
 
 // 後退したタイルたち
 vector<Point> MachineManager::_retreatTiles;
@@ -118,7 +118,8 @@ void MachineManager::Move1Tile()
 	// 左上右下
 	bool wallexists[4] = {false, false, false, false};
 
-	const int sensortimes = 50;
+	//ToFセンサを読み取る回数
+	const int sensortimes = 30;
 
 	bool ltreached = false;
 	bool ttreached = false;
@@ -139,13 +140,14 @@ void MachineManager::Move1Tile()
 		tofdisarr[TOF_BACKWARD] = 9999;
 	}
 
-	// TODO MOVEmachineではロボットの位置だけ更新する
-	// 新しい場所だったら、距離を測り、マッピングに追加する作業がある
 	if (MappingManager::IsReached(_nowRobotPosition) == -1)
 	{
 		tofdisarr[TOF_LEFT] = ToFManager::GetDistance(ToFAngle::Left, sensortimes);
+		delay(10);
 		tofdisarr[TOF_FORWARD] = ToFManager::GetDistance(ToFAngle::Forward, sensortimes);
+		delay(10);
 		tofdisarr[TOF_RIGHT] = ToFManager::GetDistance(ToFAngle::Right, sensortimes);
+		delay(10);
 
 		// 西北東南
 		Wall wl[4]{Wall::WallNotExists, Wall::WallNotExists, Wall::WallNotExists, Wall::WallNotExists};
@@ -242,6 +244,8 @@ void MachineManager::Move1Tile()
 	Serial.printf("tof left: %d, forward: %d, right: %d\n", tofdisarr[0], tofdisarr[1], tofdisarr[2]);
 	Serial.printf("condition left: %d, forward: %d, right %d\n", wallexists[0], wallexists[1], wallexists[2]);
 	Serial.printf("canleft: %d, canforward: %d, canright: %d\n", canLeft, canForward, canRight);
+	Serial.println("gyro sensor:");
+	Serial.printf("y[0] : %lf\ny[1] : %lf\n", mpu->gyro[1][0], mpu->gyro[1][1]);
 	Serial.println("----------------------------------Robot condtion end-------------------------------");
 #endif
 
@@ -417,6 +421,8 @@ void MachineManager::MoveForward(double cm)
 	{
 		TCSManager::TCS_read();
 		mpu->read();
+
+		Serial.printf("gyro z : %lf\ngyro y : %lf\n", mpu->gyro[2][1], mpu->gyro[1][1]);
 
 		// 黒に踏み込んだら
 		if (TCSManager::Clear < 200)
@@ -635,6 +641,15 @@ void MachineManager::RotateRobot(double ang)
 /// @brief 最初の一回。どの向きに進んでいくかを決める
 void MachineManager::Initialize()
 {
+
+	// looptaskを保存、緊急停止時に強制的にsuspendedにさせるため
+	taskvec.push_back(Task{.task = xTaskGetHandle(LOOPTASK_NAME), .name = LOOPTASK_NAME});
+
+	if (taskvec[taskvec.size() - 1].task == NULL)
+	{
+		Serial.println("fatal: loop task does not found!!!");
+	}
+
 	semaphore = xSemaphoreCreateBinary();
 
 	// セマフォは初期動作がなぜか不安定で取得してもしたことにならず、そのせいでそのセマフォが一生使えなくなるという珍事が発生するので一度取得して手放す

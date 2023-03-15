@@ -14,6 +14,11 @@
 using std::string;
 using std::vector;
 
+//タスク名
+#define SENSOR_READ_TASK_NAME "SensorRead"
+#define BUTTON_READ_TASK_NAME "ButtonRead"
+#define LOOPTASK_NAME "loopTask"
+
 // センサの存在チェック、定期的な読み込みをスキップする。デバッグ用フラグ。
 #define SKIP_SENSORS_CHECK false
 
@@ -78,6 +83,7 @@ using std::vector;
 
 class MachineManager
 {
+
 private:
 	MachineManager();
 
@@ -106,11 +112,15 @@ private:
 	static vector<double> _temps;
 
 public:
+	struct Task
+	{
+		TaskHandle_t task;
+		string name;
+	};
 	static vector<double> gyro_y;
 
-	//初めにlooptaskを入れること
-	static vector<TaskHandle_t> tasks;
-	
+	static vector<MachineManager::Task> taskvec;
+
 	static string p2str(Point p);
 	static volatile SemaphoreHandle_t semaphore;
 	static Direction _a2dir(Angle ang);

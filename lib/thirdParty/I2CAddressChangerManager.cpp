@@ -6,5 +6,6 @@ void I2CAddressChangerManager::ChangeAddress(unsigned char channel)
 {
 	Wire.beginTransmission(PCA_ADDRESS);
 	Wire.write((channel & 0x07) | 0x08);
-	Wire.endTransmission();
+	Wire.endTransmission(true);
+	//Serial.printf("address changed to %d\n", channel);
 }

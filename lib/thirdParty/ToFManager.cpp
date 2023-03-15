@@ -33,13 +33,14 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 	}
 
 	I2CAddressChangerManager::ChangeAddress((unsigned char)ang);
-	delay(30);
+	delay(3);
 
 	// 先に何回か読む
 	for (int i = 0; i < 5; i++)
 	{
 		Wire.beginTransmission(TOF_ADDRESS);
 		Wire.write(0xD3);
+		//Wire.endTransmission(false);
 		Wire.endTransmission();
 
 		Wire.requestFrom(TOF_ADDRESS, 2);
@@ -59,35 +60,42 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 
 	int amari = 0;
 
+	// 2回に一回エラーが出るので両方見る用
+	bool debugwatcher = false;
+
 	for (int i = 0; i < n + amari; i++)
 	{
 		Wire.beginTransmission(TOF_ADDRESS);
-		Wire.write(0xD3);
-		Wire.endTransmission();
+		int writecondition = (int)Wire.write(0xD3);
 
-		Wire.requestFrom(TOF_ADDRESS, 2);
+		int endcond = (int)Wire.endTransmission(false);
+
+		int reqcond = (int)Wire.requestFrom(TOF_ADDRESS, 2);
 
 		if (Wire.available() == 0)
 		{
 			Serial.printf("no data can be received!!! i is %d, dir is %d\n", i, (int)ang);
+			Serial.printf("returns:\nWire.write(): %d\nWire.endTransmission(): %d\nWire.requestFrom(): %d\n", writecondition, endcond, reqcond);
+			continue;
 		}
 
 		uint16_t tmp = Wire.read() << 8 | Wire.read();
 
-		if (tmp == 8888 || tmp == 0b1111111111111111 || tmp == 0)
+		if (tmp > 8888 || tmp == 0)
 		{
 			M5.Lcd.printf("%u detected!! i is %d, dir is %d\n", tmp, i, (int)ang);
 			Serial.printf("%u detected!! i is %d, dir is %d\n", tmp, i, (int)ang);
-			if (tmp == 8888)
-				amari++;
 
-			// はずれが5回以上出たら壁はないものとして返す
-			if (amari >= 5)
-			{
-				xSemaphoreGive(MachineManager::semaphore);
-				return 8888;
-			}
 			continue;
+		}
+		else if (tmp == 8888)
+			amari++;
+
+		// はずれが5回以上出たら壁はないものとして返す
+		if (amari >= 5)
+		{
+			xSemaphoreGive(MachineManager::semaphore);
+			return 8888;
 		}
 
 		sum += (int)tmp;

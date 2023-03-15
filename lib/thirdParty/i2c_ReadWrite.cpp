@@ -97,7 +97,8 @@ bool i2c_ReadWrite::read(uint8_t addr, uint8_t reg, uint8_t num)
 	bool communication;
 	_wire->beginTransmission(addr);
 	_wire->write(reg);
-	_wire->endTransmission();
+	//2023 03 10 引数なしから引数をfalseに変更
+	_wire->endTransmission(false);
 	_wire->requestFrom(addr, num);
 	uint8_t counter = 0;
 	if (_wire->available() == num)

@@ -31,13 +31,13 @@ void TCSManager::TCS_read()
 {
     Wire.beginTransmission(0x29);
     Wire.write(CMD_INCREMENT | CMD_CDATA);
-    Wire.endTransmission();
+    Wire.endTransmission(false);
     Wire.requestFrom(0x29, 8);
-    while (Wire.available() < 8)
-    {
-        delay(10);
-        M5.Lcd.println("No data sent from TCS.");
-    }
+    //while (Wire.available() < 8)
+    //{
+    //    delay(10);
+    //    M5.Lcd.println("No data sent from TCS.");
+    //}
 
     Clear = Wire.read() | Wire.read() << 8;
     Red = Wire.read() | Wire.read() << 8;

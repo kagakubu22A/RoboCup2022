@@ -11,6 +11,11 @@
 
 #include "Arduino.h"
 
+//2023/03/13 baseX.cppから移動
+#define MAX(in, max)            (((in) > (max)) ? (in) : (max))
+#define MIN(in, min)            (((in) < (min)) ? (in) : (min))
+#define CONSTRAIN(in, min, max) MAX(min, MIN(in, max))
+
 #define BASE_X_ADDR (0x22)
 
 #define BASE_X_SERVO_ANGLE_ADDR (0x00)

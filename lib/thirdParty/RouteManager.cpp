@@ -57,7 +57,6 @@ void RouteManager::Move1Step()
 		// Å‘å4•ûŒü‚ÉL‚Î‚¹‚é‚Ì‚Å4‰ñŒJ‚è•Ô‚·
 		for (int k = 0; k < 4; k++)
 		{
-			// TODO Angle ‚ğ Direction ‚É•Ï‚¦Apointrotate‚ğ_dir2p‚É•Ï‚¦‚½‚ª‘åä•v‚©
 			if (tl.GetWall((Direction)k) == Wall::WallNotExists && WhenPointReached(MachineManager::_dir2p(tmpv[i].getLatest(), (Direction)k)) < 0)
 			{
 				Route_v2 r(tmpv[i].getAllPoint(), (Direction)k);
