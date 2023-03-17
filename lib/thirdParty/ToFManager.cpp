@@ -13,47 +13,22 @@ using std::vector;
 /// @return 距離(mm)
 uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 {
-	// セマフォをとる
-	for (int i = 0; i < 5; i++)
-	{
-		if (xSemaphoreTake(MachineManager::semaphore, 2000) == pdTRUE)
-		{
-			break;
-		}
-		else
-		{
-			if (i == 4)
-			{
-
-				Serial.println("Cant get distance because of semaphore!!");
-				break;
-			}
-			Serial.println("did not get semaphore in time. retrying...");
-		}
-	}
-
-	I2CAddressChangerManager::ChangeAddress((unsigned char)ang);
-	delay(3);
-
 	// 先に何回か読む
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 6; i++)
 	{
+		I2CAddressChangerManager::TakeSemaphoreAndChangeAddress((unsigned char)ang, 500);
+		delay(20);
 		Wire.beginTransmission(TOF_ADDRESS);
 		Wire.write(0xD3);
-		// Wire.endTransmission(false);
 		Wire.endTransmission();
-
-		Wire.requestFrom(TOF_ADDRESS, 2);
+		int r = Wire.requestFrom(TOF_ADDRESS, 2);
+		if (r == 0)
+		{
+			Serial.printf(" err %d\n", i);
+		}
 		uint16_t tmp = Wire.read() << 8 | Wire.read();
-
-		delay(34);
-
-		// Tofは計測するごとに34msのクールタイムが必要
-		/*delay(34);
-		Wire.beginTransmission(TOF_ADDRESS);
-		Wire.write(0xF5);
-		Wire.endTransmission();
-		delay(34);*/
+		I2CAddressChangerManager::ReleaseSemaphore();
+		delay(20);
 	}
 
 	vector<uint16_t> tmpv;
@@ -66,21 +41,26 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 
 	for (int i = 0; i < n + amari; i++)
 	{
+		if (!I2CAddressChangerManager::TakeSemaphoreAndChangeAddress((unsigned char)ang, 500))
+		{
+			Serial.println("cant get semaphore to get distance!!");
+		}
+		delay(20);
 		Wire.beginTransmission(TOF_ADDRESS);
 		int writecondition = (int)Wire.write(0xD3);
-
 		int endcond = (int)Wire.endTransmission(false);
-
 		int reqcond = (int)Wire.requestFrom(TOF_ADDRESS, 2);
 
 		if (Wire.available() == 0)
 		{
 			Serial.printf("no data can be received!!! i is %d, dir is %d\n", i, (int)ang);
 			Serial.printf("returns:\nWire.write(): %d\nWire.endTransmission(): %d\nWire.requestFrom(): %d\n", writecondition, endcond, reqcond);
+			I2CAddressChangerManager::ReleaseSemaphore();
 			continue;
 		}
 
 		uint16_t tmp = Wire.read() << 8 | Wire.read();
+		I2CAddressChangerManager::ReleaseSemaphore();
 
 		if (tmp > (uint16_t)8888 || tmp == (uint16_t)0 || tmp == (uint16_t)256)
 		{
@@ -92,10 +72,9 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 		else if (tmp == 8888)
 			amari++;
 
-		// はずれが5回以上出たら壁はないものとして返す
-		if (amari >= 5)
+		// はずれが4回以上出たら壁はないものとして返す
+		if (amari >= 4)
 		{
-			xSemaphoreGive(MachineManager::semaphore);
 			return 8888;
 		}
 
@@ -112,7 +91,7 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 
 		tmpv.push_back(tmp);
 
-		delay(34);
+		delay(20);
 	}
 
 	Serial.printf("min: %d,max: %d\n", (int)min, (int)max);
@@ -122,6 +101,5 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 	}
 	Serial.println();*/
 
-	xSemaphoreGive(MachineManager::semaphore);
 	return (int)round((double)sum / n);
 }

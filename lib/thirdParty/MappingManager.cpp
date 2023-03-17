@@ -2,71 +2,68 @@
 #include "MachineManager.h"
 #include <M5Stack.h>
 
-// すでに通過したマスの配列
-vector<TileInfo> MappingManager::_passedTileVec;
+vector<vector<TileInfo>> MappingManager::_passedTilevecs = vector<vector<TileInfo>>(1);
+vector<vector<Point>> MappingManager::_unexploredPosvecs = vector<vector<Point>>(1);
 
-// いけるけど行ってない座標の配列
-vector<Point> MappingManager::_unexploredPosvec;
+// TODO structかなんか作ってまとめない?
+vector<int> MappingManager::xMaxs = vector<int>(1, 0), MappingManager::yMaxs = vector<int>(1, 0), MappingManager::xmins = vector<int>(1, 0), MappingManager::ymins = vector<int>(1, 0);
 
-// x,yの最大値、最小値
-int MappingManager::xMax = 0, MappingManager::yMax = 0, MappingManager::xmin = 0, MappingManager::ymin = 0;
+//今何階にいるか
+int MappingManager::nowFloor = 1;
 
 /// @brief 指定した座標が既に登録されているか調べる
 /// @param p 登録する座標
 /// @return 既に登録されている場合はfalse、新たに登録した場合はtrueを返し、この場合にのみ配列に追加される
 bool MappingManager::PointAdd(TileInfo tile)
 {
-	for (TileInfo ti : _passedTileVec)
+	for (TileInfo ti : _passedTilevecs[nowFloor - 1])
 	{
 		if (ti.GetPoint() == tile.GetPoint())
 		{
-
 			return false;
 		}
 	}
 
 	// 最大値、最小値の更新
-	if (xMax < tile._p.x)
+	if (xMaxs[nowFloor - 1] < tile._p.x)
 	{
-		xMax = tile._p.x;
+		xMaxs[nowFloor - 1] = tile._p.x;
 	}
-	if (yMax < tile._p.y)
+	if (yMaxs[nowFloor - 1] < tile._p.y)
 	{
-		yMax = tile._p.y;
+		yMaxs[nowFloor - 1] = tile._p.y;
 	}
-	if (xmin > tile._p.x)
+	if (xmins[nowFloor - 1] > tile._p.x)
 	{
-		xmin = tile._p.x;
+		xmins[nowFloor - 1] = tile._p.x;
 	}
-	if (ymin > tile._p.y)
+	if (ymins[nowFloor - 1] > tile._p.y)
 	{
-		ymin = tile._p.y;
+		ymins[nowFloor - 1] = tile._p.y;
 	}
 
-	_passedTileVec.push_back(tile);
+	_passedTilevecs[nowFloor - 1].push_back(tile);
 	Serial.printf("new tile added at: %s\n", MachineManager::p2str(tile._p).c_str());
 
 	// いけるけど行っていないタイルを更新する
 	for (int i = 0; i < 4; i++)
 	{
-		// Serial.println(tile.GetWall((Direction)i) == Wall::WallExists);
 		if (tile.GetWall((Direction)i) == Wall::WallNotExists)
 		{
-			Serial.printf("dircrion: %d, wall notexists\n", i);
 			Point tp = MachineManager::_dir2p(tile._p, (Direction)i);
-			if (checkOverlap(_passedTileVec, tp) == -1)
+			if (checkOverlap(_passedTilevecs[nowFloor - 1], tp) == -1)
 			{
-				_unexploredPosvec.push_back(tp);
+				_unexploredPosvecs[nowFloor - 1].push_back(tp);
 				Serial.printf("new unexplored tile at %s\n", MachineManager::p2str(tp).c_str());
 			}
 		}
 	}
 	// 行けるけど行っていないタイルのうち、今回で訪れたタイルがあれば削除
-	for (int i = 0; i < _unexploredPosvec.size(); i++)
+	for (int i = 0; i < _unexploredPosvecs[nowFloor - 1].size(); i++)
 	{
-		if (_unexploredPosvec[i] == tile._p)
+		if (_unexploredPosvecs[nowFloor - 1][i] == tile._p)
 		{
-			_unexploredPosvec.erase(_unexploredPosvec.begin() + i);
+			_unexploredPosvecs[nowFloor - 1].erase(_unexploredPosvecs[nowFloor - 1].begin() + i);
 		}
 	}
 	return true;
@@ -76,7 +73,7 @@ bool MappingManager::PointAdd(TileInfo tile)
 /// @return
 vector<Point> MappingManager::FindUnesxplored()
 {
-	return _unexploredPosvec;
+	return _unexploredPosvecs[nowFloor - 1];
 }
 
 /// @brief ダブりがあるかどうかを返す
@@ -147,7 +144,7 @@ void MappingManager::DisplayMap()
 	const int tilesize = 10;
 
 	// x,y方向に何マスあるか
-	int xno = abs(xMax - xmin) + 1, yno = abs(yMax - ymin) + 1;
+	int xno = abs(xMaxs[nowFloor - 1] - xmins[nowFloor - 1]) + 1, yno = abs(yMaxs[nowFloor - 1] - ymins[nowFloor - 1]) + 1;
 
 	// マスをいくつかの記号の集合体として表現したとき、何個必要か
 	int serialxsize = tilesize + (xno - 1) * (tilesize - 1), serialysize = tilesize + (yno - 1) * (tilesize - 1);
@@ -160,11 +157,11 @@ void MappingManager::DisplayMap()
 		{
 			//[y][x]の順で座標を突っ込まないといけない点に注意
 			TileInfo ti;
-			int nowFocusingTile_x = x + xmin;
-			int nowFocusingTile_y = y + ymin;
-			if (GetTileFromPosition(Point{x + xmin, y + ymin}, ti))
+			int nowFocusingTile_x = x + xmins[nowFloor - 1];
+			int nowFocusingTile_y = y + ymins[nowFloor - 1];
+			if (GetTileFromPosition(Point{x + xmins[nowFloor - 1], y + ymins[nowFloor - 1]}, ti))
 			{
-				Serial.printf("Point (%d, %d) found.\n", x + xmin, y + ymin);
+				Serial.printf("Point (%d, %d) found.\n", x + xmins[nowFloor - 1], y + ymins[nowFloor - 1]);
 
 				// まずはじめに進入禁止だったら塗りつぶす
 				if (ti.fp == FloorType::KeepOut)
@@ -183,7 +180,7 @@ void MappingManager::DisplayMap()
 				int nposy = ((serialysize - 1) - ((tilesize - 1) * (y + 1))) + 1;
 
 				// 自分のいる座標だったら矢印を描く
-				if (Point{x + xmin, y + ymin} == MachineManager::GetRobotPos())
+				if (Point{x + xmins[nowFloor - 1], y + ymins[nowFloor - 1]} == MachineManager::GetRobotPos())
 				{
 					wallvec[nposy + 4][nposx + 4] = (int)MachineManager::GetRobotDir() + DIRECTION_WEST;
 				}
@@ -198,7 +195,7 @@ void MappingManager::DisplayMap()
 				wallvec[nposy][nposx] = POSITION_WRITING_BEGIN_FLAG;
 				nposx++;
 				// 座標マイナスなら符号を描く
-				if (x + xmin < 0)
+				if (x + xmins[nowFloor - 1] < 0)
 				{
 					wallvec[nposy][nposx] = POSITION_SIGNAL_FLAG;
 					nposx++;
@@ -212,7 +209,7 @@ void MappingManager::DisplayMap()
 				nposx++;
 
 				// 座標マイナスなら符号を描く
-				if (x + xmin < 0)
+				if (x + xmins[nowFloor - 1] < 0)
 				{
 					wallvec[nposy][nposx] = POSITION_SIGNAL_FLAG;
 					nposx++;
@@ -328,14 +325,14 @@ void MappingManager::DisplayMap()
 /// @return
 Point MappingManager::GetUnreachedAndDelete()
 {
-	int at = _unexploredPosvec.size() - 1;
-	Point p = _unexploredPosvec[at];
+	int at = _unexploredPosvecs[nowFloor - 1].size() - 1;
+	Point p = _unexploredPosvecs[nowFloor - 1][at];
 	Serial.println("candidates to reach:");
-	for (int i = 0; i < _unexploredPosvec.size(); i++)
+	for (int i = 0; i < _unexploredPosvecs[nowFloor - 1].size(); i++)
 	{
-		Serial.printf("%s\n", MachineManager::p2str(_unexploredPosvec[i]).c_str());
+		Serial.printf("%s\n", MachineManager::p2str(_unexploredPosvecs[nowFloor - 1][i]).c_str());
 	}
-	_unexploredPosvec.erase(_unexploredPosvec.begin() + at);
+	_unexploredPosvecs[nowFloor - 1].erase(_unexploredPosvecs[nowFloor - 1].begin() + at);
 	M5.Lcd.printf("Deleted at :");
 	Serial.printf("deleted at : (%d, %d)\n", p.x, p.y);
 	return p;
@@ -347,7 +344,7 @@ Point MappingManager::GetUnreachedAndDelete()
 /// @return あったらtrue、なかったらfalse
 bool MappingManager::GetTileFromPosition(Point point, TileInfo &tl)
 {
-	for (TileInfo ti : _passedTileVec)
+	for (TileInfo ti : _passedTilevecs[nowFloor - 1])
 	{
 		if (ti.GetPoint() == point)
 		{
@@ -360,9 +357,9 @@ bool MappingManager::GetTileFromPosition(Point point, TileInfo &tl)
 
 int MappingManager::IsReached(Point p)
 {
-	for (int i = 0; i < _passedTileVec.size(); i++)
+	for (int i = 0; i < _passedTilevecs[nowFloor - 1].size(); i++)
 	{
-		if (_passedTileVec[i]._p == p)
+		if (_passedTilevecs[nowFloor - 1][i]._p == p)
 			return i;
 	}
 	return -1;
@@ -370,18 +367,19 @@ int MappingManager::IsReached(Point p)
 
 vector<TileInfo> MappingManager::GetPassedTileVec()
 {
-	return _passedTileVec;
+	return _passedTilevecs[nowFloor - 1];
 }
-
-/// @brief 応急処置関数。pを_unexploredvecから除去する
-/// @param p
-void MappingManager::DeleteAsBlack(Point p)
+// TODO 1階から始まることを想定しています
+/// @brief
+/// @param floor
+void MappingManager::FloorChanged(int floor)
 {
-	for (int i = 0; i < _unexploredPosvec.size(); i++)
+	while (floor >= _unexploredPosvecs.size())
 	{
-		if (_unexploredPosvec[i] == p)
-		{
-			_unexploredPosvec.erase(_unexploredPosvec.begin() + i);
-		}
+		_unexploredPosvecs.push_back(vector<Point>());
+		_passedTilevecs.push_back(vector<TileInfo>());
+		xMaxs.push_back(0);
+		// TODO xmax,yminなど追加、xmax[0]を0にする
 	}
+	nowFloor = floor;
 }

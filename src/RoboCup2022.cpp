@@ -69,9 +69,9 @@ void sensorRead(void *arg)
 	static int i = 0;
 	while (1)
 	{
-		if (xSemaphoreTake(MachineManager::semaphore, 20) == pdTRUE)
+		if (I2CAddressChangerManager::TakeSemaphoreAndChangeAddress(5, 20))
 		{
-			I2CAddressChangerManager::ChangeAddress(5);
+
 			mpu6050.read();
 			// Serial.printf("mpu read, i = %d\n", i++);
 			// TCSManager::TCS_read();
@@ -83,14 +83,8 @@ void sensorRead(void *arg)
 			MachineManager::gyro_y[GYRO_SAVENUM - 1] = mpu6050.gyro[1][1];
 
 			// セマフォ返却
-			xSemaphoreGive(MachineManager::semaphore);
+			I2CAddressChangerManager::ReleaseSemaphore();
 		}
-		else
-		{
-			// Serial.println("semaphore cant get in sensorread()");
-		}
-		// TCSManager::TCS_read();
-		//  vTaskDelay(1);
 		delay(1);
 		// Serial.print("read end");
 	}
@@ -181,14 +175,6 @@ void loop()
 	}
 	return;
 	*/
-
-	/*for (int i = 0; i < 5; i++)
-	{
-		Serial.printf("direction : %d, d = %d\n", i, MachineManager::Readtmp(i, 35));
-		delay(10);
-	}
-	// Serial.printf("gyro: %lf\n", mpu6050.gyro[1][1]);
-	return;*/
 
 	// これより下に常時動かすコードを書くこと
 	if (!MachineManager::ForceStop)

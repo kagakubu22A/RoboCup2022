@@ -18,27 +18,28 @@
 #include "TileInfo.h"
 using std::vector;
 
-class MappingManager{
-    private:
+class MappingManager
+{
+private:
     MappingManager();
-    
-    private:
 
-    static vector<TileInfo> _passedTileVec;
-    static vector<Point> _unexploredPosvec;
+private:
+    static vector<vector<TileInfo>> _passedTilevecs;
+    static vector<vector<Point>> _unexploredPosvecs;
 
-    static int xMax;
-    static int yMax;
-    static int xmin;
-    static int ymin;
+    static bool _is2nd;
+
+    static int nowFloor;
+
+    static vector<int> xMaxs, yMaxs, xmins, ymins;
 
     static int checkOverlap(vector<TileInfo> tls, TileInfo checkedTile);
     static int checkOverlap(vector<Point> ps, Point checkedPos);
     static int checkOverlap(vector<TileInfo> tl, Point checkedPos);
 
-    static Walls _wallgenerate(bool west,bool north,bool east,bool south);
+    static Walls _wallgenerate(bool west, bool north, bool east, bool south);
 
-    public:
+public:
     static bool PointAdd(TileInfo tile);
 
     static int IsReached(Point p);
@@ -54,6 +55,8 @@ class MappingManager{
     static bool GetTileFromPosition(Point point, TileInfo &tl);
 
     static void DeleteAsBlack(Point p);
+
+    static void FloorChanged(int floor);
 };
 
 #endif

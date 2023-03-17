@@ -27,6 +27,8 @@ vector<Point> MachineManager::_retreatTiles;
 
 bool MachineManager::ForceStop = false;
 
+bool MachineManager::isprevclimb = false;
+
 // 東のほうがx軸の正の方向、北のほうがy軸の制の方向
 Point MachineManager::_nowRobotPosition{0, 0};
 
@@ -101,6 +103,8 @@ string MachineManager::p2str(Point p)
 	res += std::to_string(p.x);
 	res += ", ";
 	res += std::to_string(p.y);
+	res += ", ";
+	res += std::to_string(p.floor);
 	res += ")";
 	return res;
 }
@@ -120,18 +124,17 @@ void MachineManager::Move1Tile()
 	bool wallexists[4] = {false, false, false, false};
 
 	// ToFセンサを読み取る回数
-	const int sensortimes = 7;
+	const int sensortimes = 6;
 
 	bool ltreached = false;
 	bool ttreached = false;
 	bool rtreached = false;
 
-	bool isprevclimb = false;
 	// 流れ
 	// 距離を測る→マッピングに追加する→測った距離に従って機体を移動させる
 
 	// 坂などの障害物がなかった時には毎回リセットをする
-	if (isprevclimb)
+	if (!isprevclimb)
 	{
 		if (xSemaphoreTake(semaphore, 20) == pdTRUE)
 		{
@@ -157,14 +160,25 @@ void MachineManager::Move1Tile()
 		tofdisarr[TOF_BACKWARD] = 9999;
 	}
 
+	// 初めて来たところだったら計測する
 	if (MappingManager::IsReached(_nowRobotPosition) == -1)
 	{
+		// 壁の有無を計測
 		tofdisarr[TOF_LEFT] = ToFManager::GetDistance(ToFAngle::Left, sensortimes);
 		delay(10);
 		tofdisarr[TOF_FORWARD] = ToFManager::GetDistance(ToFAngle::Forward, sensortimes);
 		delay(10);
 		tofdisarr[TOF_RIGHT] = ToFManager::GetDistance(ToFAngle::Right, sensortimes);
 		delay(10);
+
+		// 温度を測る
+		double tempr1 = mlx1.readObjectTempC();
+		double tempr2 = mlx2.readObjectTempC();
+
+		if (tempr1 == NAN || tempr2 == NAN)
+		{
+			Serial.println("Failed to read temp sensor!!");
+		}
 
 		// 西北東南
 		Wall wl[4]{Wall::WallNotExists, Wall::WallNotExists, Wall::WallNotExists, Wall::WallNotExists};
@@ -330,11 +344,6 @@ void MachineManager::Move1Tile()
 			}
 		}
 	}
-	/*M5.Lcd.clear();
-	M5.Lcd.setCursor(0, 0);
-	M5.Lcd.println("Map is below:");
-	MappingManager::DisplayMap();
-	delay(5000);*/
 }
 
 void MachineManager::ResetEncoder()
@@ -444,7 +453,7 @@ void MachineManager::MoveForward(double cm)
 		// Serial.printf("gyro z : %lf\ngyro y : %lf, clearness : %d\n", mpu->gyro[2][1], mpu->gyro[1][1], TCSManager::Clear);
 
 		// 黒に踏み込んだら
-		if (TCSManager::Clear < 800)
+		if (TCSManager::Clear < 500)
 		{
 			M5.Lcd.println("Black Floor detected!!!");
 			_motor_off();
@@ -478,7 +487,8 @@ void MachineManager::MoveForward(double cm)
 		// TODO 不安定になったら絶対値外す
 		if (abs(mpu->gyro[1][1]) > 10.0)
 		{
-			Serial.printf("saka detected, %d", timer);
+			Serial.printf("saka detected, %d\n", timer);
+			isprevclimb = true;
 			M5.Lcd.println("slope detected");
 			M5.Lcd.clear();
 			M5.Lcd.setCursor(0, 0);
@@ -737,7 +747,7 @@ void MachineManager::Initialize()
 
 	// TCS(色センサ)の初期設定
 	TCSManager::TCS_begin();
-	M5.Lcd.println("Tcs initialize finished.");
+	M5.Lcd.println("TCS initialize finished.");
 
 	// GP906(温度センサ)の初期設定
 	mlx1.begin();
@@ -753,21 +763,6 @@ void MachineManager::Initialize()
 	M5.Lcd.println("GY-906 initialize finished.");
 
 	return;
-
-	// スタート地点の状況を把握する
-	/*Wall wltmp[4];
-	for (int i = 0; i < 4; i++)
-	{
-		if (ToFManager::GetDistance((ToFAngle)i, 50) < WALL_THRESHOLD_MM)
-		{
-			wltmp[i] = Wall::WallExists;
-		}
-		else
-		{
-			wltmp[i] = Wall::WallNotExists;
-		}
-	}
-	TileManager::Initialize(Walls{wltmp[0], wltmp[1], wltmp[2], wltmp[3]});*/
 }
 
 /// @brief MPUを登録。最終的にはMPUのクラスをstaticにしてこの作業いらないようにしたいねぇ

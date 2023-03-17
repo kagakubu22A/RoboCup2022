@@ -11,5 +11,8 @@ class I2CAddressChangerManager{
     public:
     static void ChangeAddress(unsigned char channel);
 
+    static bool TakeSemaphoreAndChangeAddress(unsigned char channel, int waitms);
+
+    static void ReleaseSemaphore();
 };
 #endif

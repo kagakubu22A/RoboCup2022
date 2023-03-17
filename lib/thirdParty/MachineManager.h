@@ -132,6 +132,8 @@ public:
 	static Point GetRobotPos() { return _nowRobotPosition; }
 
 	static bool ForceStop;
+	static bool isprevclimb;
+	
 	static void Initialize();
 	static void Move1Tile();
 
