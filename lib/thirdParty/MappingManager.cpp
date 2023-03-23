@@ -149,6 +149,7 @@ void MappingManager::DisplayMap()
 	// マスをいくつかの記号の集合体として表現したとき、何個必要か
 	int serialxsize = tilesize + (xno - 1) * (tilesize - 1), serialysize = tilesize + (yno - 1) * (tilesize - 1);
 
+	//最終的にシリアルに出力する配列。はじめは空欄(0x80)で埋める
 	vector<vector<unsigned char>> wallvec(serialysize, vector<unsigned char>(serialxsize, 0x80));
 
 	for (int y = 0; y < yno; y++)

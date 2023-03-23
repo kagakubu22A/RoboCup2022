@@ -148,8 +148,15 @@ int RouteManager::Obstacle2Cost(const Obstacle obs)
 	{
 	case Obstacle::Slope:
 		return 100;
+	case Obstacle::Bump:
+		return 60;
+	case Obstacle::Step:
+		return 50;
+	case Obstacle::SmtgHarmful:
+		return 55; //(Bump+Step)/2
 	default:
-		M5.Lcd.println("indeclared obstacle!! : Are all costs of obstacles set?");
-		throw std::invalid_argument("indeclared obstacle!! : All costs of obstacles are set?");
+		Serial.println("indefined obstacle!! : Are all costs of obstacles set?");
+		M5.Lcd.println("indefined obstacle!! : Are all costs of obstacles set?");
+		throw std::invalid_argument("indefined obstacle!! : All costs of obstacles are set?");
 	}
 }

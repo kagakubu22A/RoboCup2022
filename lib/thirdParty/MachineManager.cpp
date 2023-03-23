@@ -20,6 +20,8 @@ Direction MachineManager::NowFacingAbs = Direction::North;
 
 BASE_X MachineManager::bx = BASE_X();
 
+array<TCSManager, 3> MachineManager::tcs;
+
 vector<MachineManager::Task> MachineManager::taskvec;
 
 // 後退したタイルたち
@@ -27,6 +29,7 @@ vector<Point> MachineManager::_retreatTiles;
 
 bool MachineManager::ForceStop = false;
 
+// 何かしらの段差を検知したら、次は前進か後退かしか与えない
 bool MachineManager::isprevclimb = false;
 
 // 東のほうがx軸の正の方向、北のほうがy軸の制の方向
@@ -39,11 +42,30 @@ MPU6050 *MachineManager::mpu;
 Adafruit_MLX90614 MachineManager::mlx1 = Adafruit_MLX90614();
 Adafruit_MLX90614 MachineManager::mlx2 = Adafruit_MLX90614();
 
+// 坂(何かしらの傾斜)を検出したときのモータのエンコード値
+int MachineManager::prevMotorEnc = -1;
+
+// さっきバンプを上ったか
+bool MachineManager::bumpclimbed = false;
+
+// さっき階段を上ったか
+bool MachineManager::stairClimbed = false;
+
 // 部屋のデフォルトの温度
 double MachineManager::floorTemp = 0.0;
 
+// 教授不要な被災者発見
+bool MachineManager::safeVictimFound = false;
+
+// 要救助者発見
+bool MachineManager::victimInNeedFound = false;
+
 // 最初の一回が済んだか(この一回だけ後方を確認する、理由は初めだけは壁があるかもしれないから(2回目以降は後ろに壁なんてあるわけがない))
 bool MachineManager::_inited = false;
+
+// 坂やバンプの影響を受けて後退するときにtrueになる。trueになっているとき、坂の検知を無効にする。
+// TODO 2個連続してバンプが置かれないという前提の上で成立します。後で対応させること。
+bool MachineManager::SpecialMoving = false;
 
 int MachineManager::tofdisarr[5] = {0, 0, 0, 0, 0};
 
@@ -110,12 +132,11 @@ string MachineManager::p2str(Point p)
 }
 
 /// <summary>
-/// 一タイル分進める
+/// 一タイル分進める。順序:測定する→レスキューキット吐くなどの処理→進む
 /// </summary>
 /// <param name="ang"></param>
 void MachineManager::Move1Tile()
 {
-	Serial.println("Move1tile begin");
 	// 注意
 	// wlの配列に入れるのは西北東南の順(絶対的指標)
 	// tofdisarrに入れるのは左前右後の順(相対的指標)
@@ -124,7 +145,9 @@ void MachineManager::Move1Tile()
 	bool wallexists[4] = {false, false, false, false};
 
 	// ToFセンサを読み取る回数
-	const int sensortimes = 6;
+	const int sensortimes = 10;
+
+	SpecialMoving = false;
 
 	bool ltreached = false;
 	bool ttreached = false;
@@ -141,11 +164,17 @@ void MachineManager::Move1Tile()
 			mpu->_reset();
 			delay(10);
 			xSemaphoreGive(semaphore);
+			Serial.println("gyro sensor resetted");
 		}
 		else
 		{
 			Serial.println("tried to get semaphore to reset mpu, but failed to do!");
 		}
+	}
+	else
+	{
+		Serial.println("gyro sensor reset skipped");
+		SpecialMoving = true;
 	}
 
 	// 最初だけ後ろも測る
@@ -171,13 +200,15 @@ void MachineManager::Move1Tile()
 		tofdisarr[TOF_RIGHT] = ToFManager::GetDistance(ToFAngle::Right, sensortimes);
 		delay(10);
 
-		// 温度を測る
-		double tempr1 = mlx1.readObjectTempC();
-		double tempr2 = mlx2.readObjectTempC();
-
-		if (tempr1 == NAN || tempr2 == NAN)
+		//前回の探索で被災者を検知したら知らせる
+		if (victimInNeedFound)
 		{
-			Serial.println("Failed to read temp sensor!!");
+			FlashLED();
+			DispenseRescueKit();
+		}
+		else if (safeVictimFound)
+		{
+			FlashLED();
 		}
 
 		// 西北東南
@@ -194,12 +225,44 @@ void MachineManager::Move1Tile()
 		}
 
 		TileInfo ti;
+
+		// 地面の色を見て、銀色だったらチェックポイントとして追加
+		// TODO 銀判定
+		tcs[0].TCS_read();
+		if (tcs[0].Clear > 2000)
+		{
+			ti.fp = FloorType::CheckPoint;
+		}
+
 		ti._wls = Walls{wl[0], wl[1], wl[2], wl[3]};
 		ti._p = _nowRobotPosition;
 
-		// TODO 障害物検知とか追加して
-		// ti._obsvec;
-
+		// TODO バンプの場合、さっきいたタイルの端のほうにあったのか、今いるタイルの最初のほうにいるのか見分けをつける
+		// さっき何かしら上った→バンプか階段かのどちらか
+		if (isprevclimb)
+		{
+			if (bumpclimbed)
+			{
+				BothPrintln("Bump detected");
+				ti.obs = Obstacle::Bump;
+			}
+			else
+			{
+				// スロープだったら、1マス分進んでも傾きは大きいままのはず
+				if (mpu->gyro[1][1] > 18.0)
+				{
+					ti.obs = Obstacle::Slope;
+					MoveUntilFlat();
+					MappingManager::FloorChanged(2);
+					return;
+				}
+				else
+				{
+					BothPrintln("Stair detected");
+					ti.obs = Obstacle::Step;
+				}
+			}
+		}
 		MappingManager::PointAdd(ti);
 	}
 	else
@@ -230,7 +293,7 @@ void MachineManager::Move1Tile()
 
 	// 0 : 行ったことないよ
 	// 1 : すでに行ったことある
-	// 2 : 絶対いけん
+	// 2 : 絶対いけん。もしくは、さっき何かしらの段差か坂を超えたためにいけない
 	// 3 : 絶対いけないし、行ったとてすでに行ったことある(壁越しにそういうマスがあるときになるかな?)
 	int canForward = 0; // 2
 	int canRight = 0;	// 1
@@ -244,11 +307,11 @@ void MachineManager::Move1Tile()
 		canForward += 2;
 	}
 	// 右に行けない(壁がある以下略)
-	if (wallexists[2] || IsDanger(rightP) || HasRetreated(rightP))
+	if (wallexists[2] || IsDanger(rightP) || HasRetreated(rightP) || isprevclimb)
 	{
 		canRight += 2;
 	}
-	if (wallexists[0] || IsDanger(leftP) || HasRetreated(leftP))
+	if (wallexists[0] || IsDanger(leftP) || HasRetreated(leftP) || isprevclimb)
 	{
 		canLeft += 2;
 	}
@@ -271,7 +334,7 @@ void MachineManager::Move1Tile()
 	Serial.printf("now I'm at %s,Facing at %s\n", p2str(_nowRobotPosition).c_str(), Dir2Str(NowFacingAbs).c_str());
 	Serial.printf("leftP %s, forwardP %s, rightP %s\n", p2str(leftP).c_str(), p2str(topP).c_str(), p2str(rightP).c_str());
 	Serial.printf("isdanger left: %d, forward: %d, right: %d\n", IsDanger(leftP), IsDanger(topP), IsDanger(rightP));
-	Serial.printf("hasretreated left: %d, forward: %d, right: %d\n", HasRetreated(leftP), HasRetreated(topP), HasRetreated(rightP));
+	Serial.printf("hasreached left: %d, forward: %d, right: %d\n", MappingManager::IsReached(leftP), MappingManager::IsReached(topP), MappingManager::IsReached(rightP));
 	Serial.printf("tof left: %d, forward: %d, right: %d\n", tofdisarr[0], tofdisarr[1], tofdisarr[2]);
 	Serial.printf("condition left: %d, forward: %d, right %d\n", wallexists[0], wallexists[1], wallexists[2]);
 	Serial.printf("canleft: %d, canforward: %d, canright: %d\n", canLeft, canForward, canRight);
@@ -291,6 +354,7 @@ void MachineManager::Move1Tile()
 	// 右には行けないが前に行けるとわかったら前に行く
 	if (canRight != 0 && canForward == 0)
 	{
+		isprevclimb = false;
 		M5.Lcd.println("Moving Forward");
 		Serial.println("Moving Forward");
 		MoveForward(TILE_LENGTH_CM);
@@ -311,17 +375,30 @@ void MachineManager::Move1Tile()
 		if (canRight >= 2 && canForward >= 2 && canLeft >= 2)
 		{
 			M5.Lcd.println("Moving BackWard");
+			Serial.println("Moving BackWard");
 			_retTilesAdd(_nowRobotPosition);
-			RotateRobot(180);
-			MoveForward(TILE_LENGTH_CM + 5.0);
+
+			// さっき坂を上ったので、今坂の上、あるいはバンプの上にいる可能性が高い。その状態で先に回ると大事件になるので順序を逆に。
+			// 逆に、さっき上っていなかった場合は、戻った先にバンプがある可能性もあるので先に回ってから戻る
+			if (isprevclimb)
+			{
+				SpecialMoving = true;
+				isprevclimb = false;
+				MoveForward(-(TILE_LENGTH_CM + 5.0));
+				RotateRobot(180);
+			}
+			else
+			{
+				RotateRobot(180);
+				MoveForward(TILE_LENGTH_CM + 5.0);
+			}
 		}
 		else // どこかしらいけるときは、いけるけど行ってなかったマスを探す
 		{
 			vector<Point> unevec = MappingManager::FindUnesxplored();
 			if (unevec.size() == 0)
 			{
-				M5.Lcd.println("Exploring has done. Now returns.");
-				Serial.println("Exploring has done. Now returns.");
+				BothPrintln("Exploring has done. Now returns.");
 
 				// 帰還時の最適なルートを検索
 				Route_v2 backRoute = RouteManager::Pos2Pos(_nowRobotPosition, Point{0, 0});
@@ -331,10 +408,8 @@ void MachineManager::Move1Tile()
 			}
 			else
 			{
-				M5.Lcd.println("looks for new routes");
-				Serial.println("looks for new routes");
-				// 動作的に一番後ろにあるものが一番近いやろ(適当)
-				// FIXME てけとーなんで後で確かめませう
+				BothPrintln("looks for new routes");
+				// 動作的に一番後ろにあるものが、自身がいるところから一番近い
 				Route_v2 nr = RouteManager::Pos2Pos(_nowRobotPosition, MappingManager::GetUnreachedAndDelete());
 				for (int i = 0; i < nr.size(); i++)
 				{
@@ -384,18 +459,15 @@ Point MachineManager::_dir2p(Point p, Direction dir)
 /// @brief 角度の補正
 void MachineManager::DirCorrection()
 {
-
-	// TODO 後で消すこと
-	return;
-
+	bool f1noerr = true, f2noerr = true;
 	// 前についている２つのセンサーの距離の差から角度を出す
-	int f1 = (int)ToFManager::GetDistance(ToFAngle::Forward, 80);
-	int f2 = (int)ToFManager::GetDistance(ToFAngle::Forward2, 80);
+	int f1 = (int)ToFManager::GetDistance(ToFAngle::Forward, 10, &f1noerr);
+	int f2 = (int)ToFManager::GetDistance(ToFAngle::Forward2, 10, &f2noerr);
 
 	Serial.printf("f1: %d, f2: %d\n", f1, f2);
 
-	// 遠すぎると正確な値が返ってこないので
-	if (f1 > 150 || f2 > 150)
+	// 遠すぎると正確な値が返ってこない、また計測中にエラーがあったらスキップ
+	if (f1 > 200 || f2 > 200 || !f1noerr || !f2noerr)
 		return;
 	M5.Lcd.println(abs(f1 - f2));
 
@@ -403,7 +475,7 @@ void MachineManager::DirCorrection()
 
 	Serial.printf("dir is : %lf\n", gap);
 
-	// 機体が8°以上傾いていたら補正
+	// 機体が閾値以上傾いていたら補正
 	if (abs(gap) > ANGLE_CORRECTION_THRESHOLD)
 	{
 		// 45度未満だったら補正
@@ -442,18 +514,54 @@ void MachineManager::MoveForward(double cm)
 
 	for (int i = 0; i < 10; i++)
 	{
-		TCSManager::TCS_read();
+		tcs[0].TCS_read();
 	}
 
 	// 指定された長さ動くまで待機、黒いマスを見つけたら即座に後退する
 	while (abs(bx.GetEncoderValue(BASE_X_TIRE_PORT_LEFT)) < abs(movecm))
 	{
-		TCSManager::TCS_read();
+		// 被災者検知。色センサーと温度センサーを読み込む
+		// TODO 色の閾値設定
+		for (int tcsnum = 0; tcsnum < 1; tcsnum++)
+		{
+			tcs[tcsnum + 1].TCS_read();
 
-		// Serial.printf("gyro z : %lf\ngyro y : %lf, clearness : %d\n", mpu->gyro[2][1], mpu->gyro[1][1], TCSManager::Clear);
+			// 赤か黄色か緑の被災者を発見したら
+			if (tcs[tcsnum + 1].Red > 1000 ||
+				(tcs[tcsnum + 1].Red > 300 && tcs[tcsnum + 1].Green > 300 && tcs[tcsnum + 1].Blue < 100))
+			{
+				victimInNeedFound = true;
+			}
+			else if (tcs[tcsnum + 1].Green > 1000)
+			{
+				safeVictimFound = true;
+			}
+		}
 
+		{
+			// 温度を発する被災者を検知
+			double temp1 = mlx1.readObjectTempC();
+			double temp2 = mlx2.readObjectTempC();
+			if (temp1 == NAN || temp2 == NAN)
+			{
+			}
+			else
+			{
+				if (28.0 < temp1 && temp1 < 40.0 && temp1 > floorTemp + 7.0)
+				{
+					victimInNeedFound = true;
+				}
+				if (28.0 < temp2 && temp2 < 40.0 && temp2 > floorTemp + 7.0)
+				{
+					victimInNeedFound = true;
+				}
+			}
+		}
+
+		tcs[0]
+			.TCS_read();
 		// 黒に踏み込んだら
-		if (TCSManager::Clear < 500)
+		if (tcs[0].Clear < 500)
 		{
 			M5.Lcd.println("Black Floor detected!!!");
 			_motor_off();
@@ -473,7 +581,7 @@ void MachineManager::MoveForward(double cm)
 			Point bp = _dir2p(_nowRobotPosition, NowFacingAbs);
 
 			// 立ち入り禁止ゾーンは全方位壁があるとみなす
-			TileInfo tl{bp, Walls{Wall::WallExists, Wall::WallExists, Wall::WallExists, Wall::WallExists}, vector<Obstacle>{Obstacle::Nothing}, FloorType::KeepOut};
+			TileInfo tl{bp, Walls{Wall::WallExists, Wall::WallExists, Wall::WallExists, Wall::WallExists}, {Obstacle::Nothing}, FloorType::KeepOut};
 			MappingManager::PointAdd(tl);
 
 			ResetEncoder();
@@ -481,50 +589,23 @@ void MachineManager::MoveForward(double cm)
 			return;
 		}
 
-		// ジャイロセンサを監視し、機体が傾いているかを見る
+		// ジャイロセンサを監視し、機体が傾いているかを見る。戻る動作時に段差に反応されても困るのでロックをかける
 		// Y軸を監視する
-
-		// TODO 不安定になったら絶対値外す
-		if (abs(mpu->gyro[1][1]) > 10.0)
+		if (!SpecialMoving)
 		{
-			Serial.printf("saka detected, %d\n", timer);
-			isprevclimb = true;
-			M5.Lcd.println("slope detected");
-			M5.Lcd.clear();
-			M5.Lcd.setCursor(0, 0);
-
-			// 機体の傾きを検知したら、それがバンプなどによるものか坂道によるものかを見る
-
-			// バンパーと坂の違いはセンサが傾いたままか傾きの値が変わるかである
-			if (timer >= 15)
+			if ((mpu->gyro[1][1]) > 5.0)
 			{
-				// 0.5秒待って、y軸が正のほうに傾いていたら坂、傾いていなければバンプとみなす
-				if (abs(mpu->gyro[1][1]) > 10.0)
-				{ // 坂だったら登りきる
-					isClimbing = true;
-
-					double gyave = std::accumulate(gyro_y.begin(), gyro_y.end(), 0.0) / GYRO_SAVENUM;
-					// TODO 符号
-					while (abs(gyave) > 4.0)
-					{
-						Serial.printf("clibming. gyro y is %3.3lf\n", gyro_y[0]);
-						delay(2);
-						gyave = std::accumulate(gyro_y.begin(), gyro_y.end(), 0.0) / GYRO_SAVENUM;
-					}
-				}
-
-				// 登り切ったらもう少し進める
-				if (isClimbing)
-				{
-					delay(220);
-				}
-				// 登り切ったか坂じゃなかったと判定されたらここに来る、もう一度使えるようにリセットする
-				isClimbing = false;
-				timer = 0;
+				Serial.printf("saka detected, %d\n", timer);
+				isprevclimb = true;
+				M5.Lcd.println("slope detected");
+				M5.Lcd.clear();
+				M5.Lcd.setCursor(0, 0);
 			}
-			else // 待機期間中
+			// 登っているときにジャイロの傾きが負になったらバンプ
+			else if (mpu->gyro[1][1] < -0.3)
 			{
-				timer++;
+				bumpclimbed = true;
+				Serial.println("bump detected!!");
 			}
 		}
 
@@ -536,31 +617,19 @@ void MachineManager::MoveForward(double cm)
 	// 角度を補正する
 	DirCorrection();
 
-	// 温度センサで見る
-	double t1 = 0.0, t2 = 0.0;
-	for (int i = 0; i < 50; i++)
-	{
-		t1 += mlx1.readObjectTempC();
-		t2 += mlx2.readObjectTempC();
-	}
-	t1 /= 50.0;
-	t2 /= 50.0;
-
-	if (t1 > 28.0 && t1 < 40.0)
-	{
-		DispenseRescueKit();
-	}
-	if (t2 > 28.0 && t2 < 40.0)
-	{
-		DispenseRescueKit();
-	}
-
 	ResetEncoder();
 
 	delay(10);
 
 	// 新しい場所に移動したら更新
-	_nowRobotPosition = _dir2p(_nowRobotPosition, NowFacingAbs);
+	if (cm > 0)
+	{
+		_nowRobotPosition = _dir2p(_nowRobotPosition, NowFacingAbs);
+	}
+	else
+	{ // ロボットをそのまま後退させたときは進んだ向きが逆になる
+		_nowRobotPosition = _dir2p(_nowRobotPosition, (Direction)(((int)NowFacingAbs + 2) % 4));
+	}
 }
 
 Direction MachineManager::_a2dir(Angle ang)
@@ -688,26 +757,47 @@ void MachineManager::Initialize()
 	Serial.println("Sensor checking start...");
 
 	// TCS(色センサ)のチェック
+	for (int i = 0; i < 1; i++)
+	{
+		I2CAddressChangerManager::ChangeAddress((unsigned char)i + 3);
+		Wire.beginTransmission(0x29);
+		if (Wire.endTransmission() != 0)
+		{
+			Serial.printf("TCS color sensor %d does not found!!\n", i + 3);
+			M5.Lcd.printf("TCS color sensor %d does not found!!\n", i + 3);
+		}
+		else
+		{
+			TCSManager ttcs(i + 3);
+			tcs[i + 1] = ttcs;
+		}
+	}
+	I2CAddressChangerManager::ChangeAddress(0);
 	Wire.beginTransmission(0x29);
 	if (Wire.endTransmission() != 0)
 	{
-		M5.Lcd.println("TCS color sensor does not found!!");
-		Serial.println("TCS color sensor does not found!!");
+		BothPrintln("TCS color sensor FLOOR does not found!!");
 	}
+	else
+	{
+		TCSManager ttcs(0);
+		tcs[0] = ttcs;
+	}
+	// TCS(色センサ)の初期設定
+	M5.Lcd.println("TCS initialize finished.");
+
 	// 6軸センサのチェック
 	Wire.beginTransmission(0x68);
 	if (Wire.endTransmission() != 0)
 	{
-		M5.Lcd.println("MPU6050 6 axises sensor does not found!!");
-		Serial.println("MPU6050 6 axises sensor does not found!!");
+		BothPrintln("MPU6050 6 axises sensor does not found!!");
 	}
 
 	// PCAのチェック
 	Wire.beginTransmission(0x77);
 	if (Wire.endTransmission() != 0)
 	{
-		M5.Lcd.println("PCA multi connector does not found!!");
-		Serial.println("PCA multi connector does not found!!");
+		BothPrintln("PCA multi connector does not found!!");
 	}
 	else
 	{
@@ -727,14 +817,12 @@ void MachineManager::Initialize()
 	Wire.beginTransmission(0x5A);
 	if (Wire.endTransmission() != 0)
 	{
-		M5.Lcd.println("Temp sensor 1 does not found!!");
-		Serial.println("Temp sensor 1 does not found!!");
+		BothPrintln("Temp sensor 1 does not found!!");
 	}
 	Wire.beginTransmission(0x55);
 	if (Wire.endTransmission() != 0)
 	{
-		M5.Lcd.println("Temp sensor 2 does not found!!");
-		Serial.println("Temp sensor 2 does not found!!");
+		BothPrintln("Temp sensor 2 does not found!!");
 	}
 
 	Serial.println("Sensor checking finished");
@@ -745,31 +833,29 @@ void MachineManager::Initialize()
 		bx.SetMode(i, NORMAL_MODE);
 	}
 
-	// TCS(色センサ)の初期設定
-	TCSManager::TCS_begin();
-	M5.Lcd.println("TCS initialize finished.");
-
 	// GP906(温度センサ)の初期設定
 	mlx1.begin();
 	mlx2.begin(0x55);
 
-	// 部屋の温度を取得する。正確な値を出すために50回やって平均をとる
-	for (int i = 0; i < 50; i++)
+	// 部屋の温度を取得する。正確な値を出すために20回やって平均をとる
+	int i = 0;
+	while (i < 20)
 	{
-		floorTemp += mlx1.readObjectTempC();
+		double tmptmp = mlx1.readAmbientTempC();
+		if (tmptmp == NAN)
+		{
+		}
+		else
+		{
+			floorTemp += tmptmp;
+			i++;
+		}
 	}
-	floorTemp /= 50.0;
+	floorTemp /= 20.0;
 
 	M5.Lcd.println("GY-906 initialize finished.");
 
 	return;
-}
-
-/// @brief MPUを登録。最終的にはMPUのクラスをstaticにしてこの作業いらないようにしたいねぇ
-/// @param m
-void MachineManager::RegisterMPU(MPU6050 *m)
-{
-	mpu = m;
 }
 
 void MachineManager::_retTilesAdd(Point p)
@@ -806,11 +892,6 @@ void MachineManager::DisplayRetry()
 			chkpvec.push_back(ti);
 		}
 	}
-	// TODO 除去
-	// chkpvec.push_back(TileInfo{Point(2, 3), Walls(Wall::WallExists, Wall::WallExists, Wall::WallExists, Wall::WallExists), vector<Obstacle>{Obstacle::Nothing}, FloorType::CheckPoint});
-	// chkpvec.push_back(TileInfo{Point(1, 4), Walls(Wall::WallExists, Wall::WallExists, Wall::WallExists, Wall::WallExists), vector<Obstacle>{Obstacle::Nothing}, FloorType::CheckPoint});
-	// chkpvec.push_back(TileInfo{Point(3, 3), Walls(Wall::WallExists, Wall::WallExists, Wall::WallExists, Wall::WallExists), vector<Obstacle>{Obstacle::Nothing}, FloorType::CheckPoint});
-	// chkpvec.push_back(TileInfo{Point(4, 3), Walls(Wall::WallExists, Wall::WallExists, Wall::WallExists, Wall::WallExists), vector<Obstacle>{Obstacle::Nothing}, FloorType::CheckPoint});
 
 	M5.Lcd.setCursor(ALIGN + 25, ALIGN);
 	M5.Lcd.setTextSize(FONT_SIZE);
@@ -917,6 +998,7 @@ void MachineManager::DispenseRescueKit()
 	// TODO レスキューキット排出機構作ろう
 	M5.Lcd.println("NAGEMA-------------------SU");
 	// delay(1000);
+	bx.SetMotorSpeed(3, 100);
 }
 
 void MachineManager::MLXRead()
@@ -953,4 +1035,45 @@ string MachineManager::Dir2Str(Direction dir)
 uint16_t MachineManager::Readtmp(int i, int n)
 {
 	return ToFManager::GetDistance((ToFAngle)i, n);
+}
+
+void MachineManager::MoveUntilFlat()
+{
+	BothPrintln("Climbing slope");
+
+	// TODO 符号逆?
+	bx.SetMotorSpeed(BASE_X_TIRE_PORT_LEFT, -MOTOR_POWER_MOVING);
+	bx.SetMotorSpeed(BASE_X_TIRE_PORT_RIGHT, -MOTOR_POWER_MOVING);
+
+	while (abs(mpu->gyro[1][1]) > 4.0)
+	{
+		delay(1);
+	}
+
+	// 登り切ったらもう少し進める
+	delay(220);
+
+	_motor_off();
+	ResetEncoder();
+}
+
+size_t MachineManager::BothPrintln(const char *text)
+{
+#if DEBUGGING_MODE
+	Serial.println(text);
+#endif
+	return M5.Lcd.println(text);
+}
+
+void MachineManager::FlashLED(int ms)
+{
+	int i = 0;
+	while (i < ms)
+	{
+		digitalWrite(LED_PIN, HIGH);
+		delay(200);
+		digitalWrite(LED_PIN, LOW);
+		delay(200);
+		i++;
+	}
 }

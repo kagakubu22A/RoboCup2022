@@ -164,17 +164,28 @@ void loop()
 	M5.Lcd.clear();
 	M5.Lcd.setCursor(0, 0);
 
-	/*
-		M5.Lcd.println(mpu6050.gyro[1][1]);
-		return;
-	*/
-	/*TCSManager::TCS_read();
-	M5.Lcd.println(TCSManager::Clear);
-	if(TCSManager::Clear<200){
-		M5.Lcd.println("Black detected");
-	}
+	//Serial.printf("accel: 0: %lf, 1: %lf, 2: %lf\n", mpu6050.accel[0][0], mpu6050.accel[0][1], mpu6050.accel[0][2]);
+	//Serial.printf("gyro : 0: %lf, 1: %lf\n", mpu6050.gyro[1][0], mpu6050.gyro[1][1]);
+	/*MachineManager::MoveForward(60.0);
+	delay(10000);
+	return;*/
+
+	static TCSManager ttcs(8);
+
+	ttcs.TCS_read();
+	Serial.println(ttcs.Clear);
+	Serial.println(ttcs.Blue);
+	Serial.println(ttcs.Red);
+	Serial.println(ttcs.Green);
+	Serial.println("endet");
+	delay(600);
 	return;
-	*/
+
+	/*MachineManager::DirCorrection();
+	long rnd = random(50, 200);
+	Serial.printf("random : %ld\n", rnd);
+	delay(rnd);
+	return;*/
 
 	// これより下に常時動かすコードを書くこと
 	if (!MachineManager::ForceStop)

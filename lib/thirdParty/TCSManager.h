@@ -21,17 +21,17 @@
 class TCSManager
 {
 private:
-    TCSManager(){}
 private:
 public:
+    TCSManager(unsigned char channel);
+    TCSManager(){}
 
-    static uint8_t ATIME;
-    static uint8_t AGAIN;
-    static uint8_t ENABLE;
-    static uint16_t Clear, Red, Green, Blue;
-
-    static void TCS_begin();
-    static void TCS_read();
+    uint8_t ATIME = 0xD5;
+    uint8_t AGAIN = 0x10;
+    uint8_t ENABLE = 0x03;
+    unsigned char ch;
+    uint16_t Clear, Red, Green, Blue;
+    void TCS_read();
 };
 
 #endif

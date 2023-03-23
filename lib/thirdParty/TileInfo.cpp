@@ -12,10 +12,10 @@ Walls::Walls(const Wall west, const Wall north, const Wall east, const Wall sout
 	wall[WALL_SOUTH] = south;
 }
 
-TileInfo::TileInfo(Point p, Walls walls, vector<Obstacle> obss = vector<Obstacle>{Obstacle::Nothing}, FloorType sa = FloorType::None)
+TileInfo::TileInfo(Point p, Walls walls, Obstacle obss = {Obstacle::Nothing}, FloorType sa = FloorType::None)
 {
 	_p = p;
-	_obsvec = obss;
+	obs = obss;
 	_wls = walls;
 	fp = sa;
 }

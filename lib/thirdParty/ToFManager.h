@@ -5,7 +5,8 @@
 
 #define TOF_ADDRESS 0x52
 
-enum class ToFAngle{
+enum class ToFAngle
+{
     Left,
     Forward,
     Right,
@@ -13,15 +14,15 @@ enum class ToFAngle{
     Forward2,
 };
 
-class ToFManager{
-    private:
+class ToFManager
+{
+private:
     ToFManager();
-    private:
 
-    static Angle prevA;
-
-    public:
-    static uint16_t GetDistance(ToFAngle ang, int n);
+private:
+    
+public:
+    static uint16_t GetDistance(ToFAngle ang, int n, bool *isSucceeded = nullptr);
 };
 
 #endif

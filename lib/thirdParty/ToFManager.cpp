@@ -11,10 +11,10 @@ using std::vector;
 /// @param ang 方向
 /// @param n 計測回数、正確性を確保するために多いほうが良い
 /// @return 距離(mm)
-uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
+uint16_t ToFManager::GetDistance(ToFAngle ang, int n, bool *isSucceeded)
 {
 	// 先に何回か読む
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < 4; i++)
 	{
 		I2CAddressChangerManager::TakeSemaphoreAndChangeAddress((unsigned char)ang, 500);
 		delay(20);
@@ -28,7 +28,7 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 		}
 		uint16_t tmp = Wire.read() << 8 | Wire.read();
 		I2CAddressChangerManager::ReleaseSemaphore();
-		delay(20);
+		delay(40);
 	}
 
 	vector<uint16_t> tmpv;
@@ -48,7 +48,7 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 		delay(20);
 		Wire.beginTransmission(TOF_ADDRESS);
 		int writecondition = (int)Wire.write(0xD3);
-		int endcond = (int)Wire.endTransmission(false);
+		int endcond = (int)Wire.endTransmission();
 		int reqcond = (int)Wire.requestFrom(TOF_ADDRESS, 2);
 
 		if (Wire.available() == 0)
@@ -56,6 +56,12 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 			Serial.printf("no data can be received!!! i is %d, dir is %d\n", i, (int)ang);
 			Serial.printf("returns:\nWire.write(): %d\nWire.endTransmission(): %d\nWire.requestFrom(): %d\n", writecondition, endcond, reqcond);
 			I2CAddressChangerManager::ReleaseSemaphore();
+
+			// 一度でも失敗すると正確な値が返ってくなくなるので失敗を告げる
+			if (isSucceeded != nullptr)
+			{
+				*isSucceeded = false;
+			}
 			continue;
 		}
 
@@ -72,12 +78,6 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 		else if (tmp == 8888)
 			amari++;
 
-		// はずれが4回以上出たら壁はないものとして返す
-		if (amari >= 4)
-		{
-			return 8888;
-		}
-
 		if (max < tmp)
 		{
 			max = tmp;
@@ -91,15 +91,30 @@ uint16_t ToFManager::GetDistance(ToFAngle ang, int n)
 
 		tmpv.push_back(tmp);
 
-		delay(20);
+		// 8888が2回以上出たら壁はないものとして返す
+		if (amari >= 2)
+		{
+			break;
+		}
+
+		delay(40);
 	}
 
 	Serial.printf("min: %d,max: %d\n", (int)min, (int)max);
-	/*for (int i = 0; i < tmpv.size(); i++)
+	for (int i = 0; i < tmpv.size(); i++)
 	{
 		Serial.printf("%d,", (int)tmpv[i]);
 	}
-	Serial.println();*/
+	Serial.println();
+
+	if (isSucceeded != nullptr)
+	{
+		*isSucceeded = true;
+	}
+	if (amari >= 2)
+	{
+		return 8888;
+	}
 
 	return (int)round((double)sum / n);
 }

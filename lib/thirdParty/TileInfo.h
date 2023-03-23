@@ -12,24 +12,27 @@ using std::vector;
 
 enum class FloorType : char
 {
-	None,
-	StartPoint,
-	CheckPoint,
-	KeepOut,
+	None,		// 普通の床
+	StartPoint, // スタート地点
+	CheckPoint, // チェックポイント
+	KeepOut,	// 立ち入り禁止(黒)
 };
 
 enum class VictimType : char
 {
-	None,
-	NeedRescue,
-	NotNeedRescue,
+	None,			// 被災者なし
+	NeedRescue,		// 被災者あり(助け必要)
+	NotNeedRescue,	// 被災者あり(助け必要なし)
+	AlreadyRescued, // 救出済み
 };
 
 enum class Obstacle : char
 {
-	Nothing,
-	Slope,
-	Step,
+	Nothing,	 // 何もない
+	Slope,		 // 坂
+	Bump,		 // バンプ
+	Step,		 // 階段
+	SmtgHarmful, // 何かしら妨害するもの
 };
 
 enum class Wall : char
@@ -52,15 +55,14 @@ public:
 class TileInfo
 {
 private:
-	
 public:
 	Walls _wls;
 
 	FloorType fp;
 
 	Point _p{0, 0};
-	vector<Obstacle> _obsvec;
-	TileInfo(Point p, Walls walls, vector<Obstacle> obss, FloorType sa);
+	Obstacle obs;
+	TileInfo(Point p, Walls walls, Obstacle obss, FloorType sa);
 	TileInfo(){};
 	Point GetPoint();
 	Wall GetWall(Direction dir);

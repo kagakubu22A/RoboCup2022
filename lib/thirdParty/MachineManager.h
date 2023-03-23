@@ -10,11 +10,13 @@
 #include "AngDir.h"
 #include "Route_v2.h"
 #include <string>
+#include <array>
 
+using std::array;
 using std::string;
 using std::vector;
 
-//タスク名
+// タスク名
 #define SENSOR_READ_TASK_NAME "SensorRead"
 #define BUTTON_READ_TASK_NAME "ButtonRead"
 #define LOOPTASK_NAME "loopTask"
@@ -79,7 +81,12 @@ using std::vector;
 #define TOF_INTERVAL 9.5
 
 // これ以上角度のずれを検知したら角度補正をする
-#define ANGLE_CORRECTION_THRESHOLD 10.0
+#define ANGLE_CORRECTION_THRESHOLD 8.0
+
+// TCSの配列
+#define TCS_FLOOR 0
+#define TCS_LEFT 1
+#define TCS_RIGHT 2
 
 class MachineManager
 {
@@ -111,6 +118,8 @@ private:
 
 	static vector<double> _temps;
 
+	static int prevMotorEnc;
+
 public:
 	struct Task
 	{
@@ -131,9 +140,20 @@ public:
 	static Direction GetRobotDir() { return NowFacingAbs; }
 	static Point GetRobotPos() { return _nowRobotPosition; }
 
+	static array<TCSManager, 3> tcs;
+
 	static bool ForceStop;
 	static bool isprevclimb;
-	
+
+	static bool SpecialMoving;
+
+	static bool bumpclimbed;
+	static bool stairClimbed;
+	static bool slopeClimbed;
+
+	static bool safeVictimFound;
+	static bool victimInNeedFound;
+
 	static void Initialize();
 	static void Move1Tile();
 
@@ -145,11 +165,15 @@ public:
 
 	static void MoveForward(double cm);
 
+	static void MoveUntilFlat();
+
 	static void RotateRobot(double ang);
 
 	static bool IsDanger(Point p);
 
-	static void RegisterMPU(MPU6050 *m);
+	/// @brief MPUを登録。最終的にはMPUのクラスをstaticにしてこの作業いらないようにしたいねぇ
+	/// @param m mpuのポインタ
+	static void RegisterMPU(MPU6050 *m) { mpu = m; }
 
 	static void DisplayPoint(Point p, bool isn = true);
 
@@ -161,5 +185,9 @@ public:
 
 	static string Dir2Str(Direction dir);
 
-	static uint16_t Readtmp(int i,int n);
+	static uint16_t Readtmp(int i, int n);
+
+	inline static size_t BothPrintln(const char *text);
+
+	static void FlashLED(int ms = 5500);
 };
